@@ -7,18 +7,18 @@
 
 typedef enum {
   CORO_RUN,
-  CORO_YILDED,
-  CORO_WAIT,
+  CORO_YIELDED,
   CORO_FINISH,
 } my_coro_state_t;
 
 struct my_coro {
   ucontext_t routine_ctx;
+  ucontext_t finish_ctx;
   ucontext_t swap_ctx;
+  
   my_coro_state_t state;
 
   void (*func)(void *);
-
   void *arg;
 };
 
