@@ -25,6 +25,8 @@ struct my_coro {
 static const size_t DEFAULT_CORO_STACK_SIZE = 1024 * 16; // bytes 
 
 int my_coro_init   (struct my_coro *c, void (*func)(void *), void *arg);
+int my_coro_run    (struct my_coro *c);
+int my_coro_yield  (struct my_coro *c);
 int my_coro_destroy(struct my_coro *c);
 
 #endif

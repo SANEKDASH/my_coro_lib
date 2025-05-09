@@ -52,8 +52,12 @@ int my_coro_init(struct my_coro *c, void (*func)(void *), void *arg)
   return 0;
 }
 
-int coro_run(struct my_coro *c)
+int my_coro_run(struct my_coro *c)
 {
+  if (c->state == CORO_FINISH) {
+	return -1;
+  }
+  
   c->state = CORO_RUN;
 
   swapcontext(&c->swap_ctx, &c->routine_ctx);
