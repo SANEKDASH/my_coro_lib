@@ -13,10 +13,6 @@ int my_coro_init(struct my_coro *c, size_t cpu_num, void (*func)(void *), void *
   c->arg  = arg;  
   c->cpu_num = cpu_num;
   
-  /*
-   * creating func routine context
-   */
-  
   pthread_cond_init(&c->wait_run, NULL);
   pthread_mutex_init(&c->mt, NULL);
   
@@ -33,17 +29,16 @@ int my_coro_init(struct my_coro *c, size_t cpu_num, void (*func)(void *), void *
   }
   
   c->routine_ctx.uc_stack.ss_size = DEFAULT_CORO_STACK_SIZE;
-  c->routine_ctx.uc_link = &c->finish_ctx;
+  c->routine_ctx.uc_link = &c->swap_ctx;
   makecontext(&c->routine_ctx, (void (*)(void)) c->func, 1, c->arg);
 
-  /*
-   * creating finish routine context
-   */
-    
-  c->state = CORO_YIELDED;
+  c->state = CORO_YIELD;
 
-  pthread_create(&c->thr, NULL, init_routine, c);
-  
+  if (pthread_create(&c->thr, NULL, init_routine, c) < 0) {
+	perror("failed to create thread\n");
+	return -1;
+  }
+
   return 0;
 }
 
@@ -56,57 +51,64 @@ static void *init_routine(void *coro_p)
   CPU_ZERO(&cpuset);
   CPU_SET(c->cpu_num, &cpuset);
 
-  if (pthread_setaffinity_np(c->thread, sizeof(cpu_set_t), &cpuset) != 0) {
+  if (pthread_setaffinity_np(c->thr, sizeof(cpu_set_t), &cpuset) != 0) {
 	perror("pthread_setaffinity_np failed");
-	return -1;
+	return NULL;
   }
 
   while (1) {
-	while(c->state != CORO_RUN) {
-	  if (c->state == ){
-		pthread_cond_wait(&c->wait_run);	
+	if (c->state == CORO_FINISH) {
+	  return NULL;
+	}
+	
+	pthread_mutex_lock(&c->mt);
+
+	while (c->state != CORO_RUN) {
+	  if (c->state == CORO_DESTROY) {
+		return NULL;
 	  }
-	}
 
-	switch (c->state) {
-	case CORO_RUN:
-	  swapcontext(&c->swap_ctx, &c->routine_ctx);   
-	  break;
-	case CORO_DESTROY:
-	case CORO_YIELDED:
-	case CORO_FINISH:
-	  goto finish;
-	  break;
-	default: 
-	  perror("wtf?");
-	  break;	
+	  pthread_cond_wait(&c->wait_run, &c->mt);
 	}
+	
+	pthread_mutex_unlock(&c->mt);
+	swapcontext(&c->swap_ctx, &c->routine_ctx);
   }
-
- finish:
+  
   return NULL;
 }
 
 int my_coro_run(struct my_coro *c)
 {
-  pthread_mutex_lock(&c->mt);
-
-  if (c->state == CORO_FINISH) {
-	pthread_mutex_lock(&c->mt);
+  if (c->state == CORO_FINISH || c->state == CORO_DESTROY) {
 	return -1;
   }
+    
+  pthread_mutex_lock(&c->mt);
+
+  while (c->state != CORO_YIELD) {
+	pthread_cond_wait(&c->wait_run, &c->mt);
+  }  
 
   c->state = CORO_RUN;
   pthread_cond_signal(&c->wait_run);
   
-  pthread_mutex_lock(&c->mt);
+  pthread_mutex_unlock(&c->mt);
   
   return 0;
 }
 
 int my_coro_yield(struct my_coro *c)
 { 
-  c->state = CORO_YIELDED;  
+  pthread_mutex_lock(&c->mt);
+  
+  if (c->state == CORO_RUN) {
+	c->state = CORO_YIELD;
+  }
+  
+  pthread_cond_signal(&c->wait_run);
+  pthread_mutex_unlock(&c->mt);  
+  
   swapcontext(&c->routine_ctx, &c->swap_ctx);
 
   return 0;
@@ -116,18 +118,35 @@ int my_coro_destroy(struct my_coro *c)
 {
   pthread_mutex_lock(&c->mt);
 
+  while (c->state != CORO_YIELD) {
+	pthread_cond_wait(&c->wait_run, &c->mt);
+  }  
+  
   c->state = CORO_DESTROY;
-
   pthread_cond_signal(&c->wait_run);
-  pthread_mutex_unlock(&c->mt.);
+  pthread_mutex_unlock(&c->mt);
+  
+  pthread_join(c->thr, NULL); 
 
-  pthread_join(c->thr);
+  pthread_cond_destroy(&c->wait_run);
+  pthread_mutex_destroy(&c->mt);
   
   free(c->routine_ctx.uc_stack.ss_sp);
-  free(c->finish_ctx.uc_stack.ss_sp);
   
   c->func = NULL;
   c->arg = NULL;  
+
+  return 0;
+}
+
+int my_coro_finish(struct my_coro *c)
+{ 
+  pthread_mutex_lock(&c->mt);
+
+  c->state = CORO_FINISH;
+  
+  pthread_cond_signal(&c->wait_run);
+  pthread_mutex_unlock(&c->mt);
 
   return 0;
 }

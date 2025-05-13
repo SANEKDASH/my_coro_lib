@@ -1,14 +1,17 @@
 #ifndef MY_CORO_LIB_HEADER
 #define MY_CORO_LIB_HEADER
 
+#define _GNU_SOURCE
 #include <ucontext.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <pthread.h>
+#include <sched.h>
 
 typedef enum {
   CORO_RUN,
-  CORO_YIELDED,
+  CORO_YIELD,
   CORO_FINISH,
   CORO_DESTROY,
 } my_coro_state_t;
@@ -34,5 +37,6 @@ int my_coro_init   (struct my_coro *c, size_t cpu_num, void (*func)(void *), voi
 int my_coro_run    (struct my_coro *c);
 int my_coro_yield  (struct my_coro *c);
 int my_coro_destroy(struct my_coro *c);
+int my_coro_finish(struct my_coro *c);
 
 #endif
