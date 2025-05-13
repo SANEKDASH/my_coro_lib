@@ -4,17 +4,23 @@
 #include <ucontext.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <pthread.h>
 
 typedef enum {
   CORO_RUN,
   CORO_YIELDED,
   CORO_FINISH,
+  CORO_DESTROY,
 } my_coro_state_t;
 
 struct my_coro {
   ucontext_t routine_ctx;
-  ucontext_t finish_ctx;
   ucontext_t swap_ctx;
+
+  size_t cpu_num;
+  pthread_t thr;
+  pthread_cond_t wait_run;
+  pthread_mutex_t mt;
   
   my_coro_state_t state;
 
@@ -24,7 +30,7 @@ struct my_coro {
 
 static const size_t DEFAULT_CORO_STACK_SIZE = 1024 * 16; // bytes 
 
-int my_coro_init   (struct my_coro *c, void (*func)(void *), void *arg);
+int my_coro_init   (struct my_coro *c, size_t cpu_num, void (*func)(void *), void *arg);
 int my_coro_run    (struct my_coro *c);
 int my_coro_yield  (struct my_coro *c);
 int my_coro_destroy(struct my_coro *c);
