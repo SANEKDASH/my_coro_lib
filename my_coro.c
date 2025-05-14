@@ -98,6 +98,54 @@ int my_coro_run(struct my_coro *c)
   return 0;
 }
 
+int my_coro_run_with(struct my_coro *c, void *new_data)
+{
+  if (c->state == CORO_FINISH || c->state == CORO_DESTROY) {
+	return -1;
+  }
+    
+  pthread_mutex_lock(&c->mt);
+
+  while (c->state != CORO_YIELD) {
+	pthread_cond_wait(&c->wait_run, &c->mt);
+  }  
+
+  c->state = CORO_RUN;
+  c->arg = new_data;
+  pthread_cond_signal(&c->wait_run);
+  
+  pthread_mutex_unlock(&c->mt);
+
+  return 0;
+}
+
+void *my_coro_get_data(struct my_coro *c) 
+{
+  return c->arg;
+}
+
+int my_coro_wait_data(struct my_coro *c, void *data)
+{
+  if (c->state == CORO_FINISH || c->state == CORO_DESTROY) {
+	return -1;
+  }
+    
+  pthread_mutex_lock(&c->mt);
+
+  if (c->arg != data) {
+	return 0;
+  }
+  
+  while (c->state != CORO_YIELD) {
+	pthread_cond_wait(&c->wait_run, &c->mt);
+  }  
+  
+  pthread_mutex_unlock(&c->mt);
+
+  return 0;
+}
+
+
 int my_coro_yield(struct my_coro *c)
 { 
   pthread_mutex_lock(&c->mt);

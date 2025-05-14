@@ -27,16 +27,20 @@ struct my_coro {
   
   my_coro_state_t state;
 
+  int yield_result;
   void (*func)(void *);
   void *arg;
 };
 
 static const size_t DEFAULT_CORO_STACK_SIZE = 1024 * 16; // bytes 
 
-int my_coro_init   (struct my_coro *c, size_t cpu_num, void (*func)(void *), void *arg);
-int my_coro_run    (struct my_coro *c);
-int my_coro_yield  (struct my_coro *c);
-int my_coro_destroy(struct my_coro *c);
-int my_coro_finish(struct my_coro *c);
+int my_coro_init    (struct my_coro *c, size_t cpu_num, void (*func)(void *), void *arg);
+int my_coro_run_with(struct my_coro *c, void *data);
+void *my_coro_get_data(struct my_coro *c);
+int my_coro_wait_data(struct my_coro *c, void *data);
+int my_coro_run     (struct my_coro *c);
+int my_coro_yield   (struct my_coro *c);
+int my_coro_destroy (struct my_coro *c);
+int my_coro_finish  (struct my_coro *c);
 
 #endif
